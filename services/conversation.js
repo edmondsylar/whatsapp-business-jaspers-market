@@ -13,6 +13,7 @@ const GraphApi = require('./graph-api');
 const Message = require('./message');
 const Status = require('./status');
 const Cache = require('./redis');
+const AlfieClient = require('./alfie-client');
 
 
 function sendTryOutDemoMessage(messageId, senderPhoneNumberId, recipientPhoneNumber, messageBody) {
@@ -95,7 +96,71 @@ module.exports = class Conversation {
     const message = new Message(rawMessage);
 
     switch (message.type) {
-      case constants.REPLY_INTERACTIVE_MEDIA_ID:
+      case 'text': {
+        const waPhone = message.senderPhoneNumber;
+
+        let context = await Cache.getContext(waPhone);
+        if (!context) {
+          context = {
+            user_id: waPhone,
+            session_id: "__general__",
+            conversation_id: null,
+          };
+        }
+
+        let alfieReply;
+        try {
+          alfieReply = await AlfieClient.callAgent(
+            message.text,
+            context.user_id,
+            context.conversation_id,
+            context.session_id
+          );
+        } catch (err) {
+          const errorText = "Sorry, I'm unable to respond right now. Please try again later.";
+          try {
+            await GraphApi.sendTextMessage(message.id, senderPhoneNumberId, waPhone, errorText);
+          } catch (sendErr) {
+            console.error("Failed to send error reply to user:", sendErr);
+          }
+          return;
+        }
+
+        const replyText = alfieReply.screen_text || alfieReply.response;
+        const newConversationId = alfieReply.conversation_id;
+
+        await Promise.allSettled([
+          AlfieClient.saveMessage(
+            newConversationId,
+            context.session_id,
+            "user",
+            message.text,
+            message.id
+          ),
+          AlfieClient.saveMessage(
+            newConversationId,
+            context.session_id,
+            "assistant",
+            replyText,
+            null
+          ),
+        ]);
+
+        await Cache.saveContext(waPhone, {
+          user_id: context.user_id,
+          session_id: context.session_id,
+          conversation_id: newConversationId,
+        });
+
+        try {
+          await GraphApi.sendTextMessage(message.id, senderPhoneNumberId, waPhone, replyText);
+        } catch (sendErr) {
+          console.error("Failed to send ALFIE reply to user:", sendErr);
+        }
+        break;
+      }
+
+      case constants.REPLY_INTERACTIVE_MEDIA_ID: {
         let interactiveMediaResponse = await sendInteractiveMediaMessage(
           message.id,
           senderPhoneNumberId,
@@ -103,7 +168,9 @@ module.exports = class Conversation {
         );
         await markMessageForFollowUp(interactiveMediaResponse.messages[0].id);
         break;
-      case constants.REPLY_MEDIA_CAROUSEL_ID:
+      }
+
+      case constants.REPLY_MEDIA_CAROUSEL_ID: {
         let mediaCarouselResponse = await sendMediaCarouselMessage(
           message.id,
           senderPhoneNumberId,
@@ -111,7 +178,9 @@ module.exports = class Conversation {
         );
         await markMessageForFollowUp(mediaCarouselResponse.messages[0].id);
         break;
-      case constants.REPLY_OFFER_ID:
+      }
+
+      case constants.REPLY_OFFER_ID: {
         let ltoResponse = await sendLimitedTimeOfferMessage(
           message.id,
           senderPhoneNumberId,
@@ -119,6 +188,8 @@ module.exports = class Conversation {
         );
         await markMessageForFollowUp(ltoResponse.messages[0].id);
         break;
+      }
+
       default:
         sendTryOutDemoMessage(
           message.id,

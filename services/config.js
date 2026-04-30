@@ -16,7 +16,9 @@ const ENV_VARS = [
   "APP_SECRET",
   "VERIFY_TOKEN",
   "REDIS_HOST",
-  "REDIS_PORT"
+  "REDIS_PORT",
+  "ALFIE_BASE_URL",
+  "ALFIE_AUTH_TOKEN",
 ];
 
 module.exports = Object.freeze({
@@ -29,6 +31,12 @@ module.exports = Object.freeze({
   port: process.env.PORT || 8080,
   redisHost: process.env.REDIS_HOST || "localhost",
   redisPort: process.env.REDIS_PORT || 6379,
+
+  // ALFIE backend configuration
+  alfieBaseUrl: process.env.ALFIE_BASE_URL || "https://api.157.230.94.55.sslip.io",
+  alfieAuthToken: process.env.ALFIE_AUTH_TOKEN,
+  alfieProvider: process.env.ALFIE_PROVIDER || "grok",
+  alfieModel: process.env.ALFIE_MODEL || "grok-4-1-fast",
 
   checkEnvVariables: function () {
     ENV_VARS.forEach(function (key) {

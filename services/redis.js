@@ -49,4 +49,28 @@ module.exports = class Cache {
 
         return resp > 0;
     }
+
+    /**
+     * Retrieve the stored ALFIE context for a WhatsApp phone number.
+     * @param {string} waPhone - The sender's WhatsApp phone number
+     * @returns {Promise<{user_id: string, session_id: string, conversation_id: string|null}|null>}
+     */
+    static async getContext(waPhone) {
+        const raw = await client.get(`alfie:ctx:${waPhone}`);
+        if (!raw) return null;
+        try {
+            return JSON.parse(raw);
+        } catch (_) {
+            return null;
+        }
+    }
+
+    /**
+     * Persist the ALFIE context for a WhatsApp phone number (no TTL).
+     * @param {string} waPhone - The sender's WhatsApp phone number
+     * @param {{user_id: string, session_id: string, conversation_id: string|null}} context
+     */
+    static async saveContext(waPhone, context) {
+        await client.set(`alfie:ctx:${waPhone}`, JSON.stringify(context));
+    }
 }
